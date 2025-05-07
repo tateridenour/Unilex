@@ -3,6 +3,8 @@ import sqlite3
 import discord
 from discord.ui import Button, View
 
+from dataclasses import dataclass
+
 # Initializing sqlite3 for articles
 art_path = "data/articles.db"
 art_con = sqlite3.connect(art_path)
@@ -37,8 +39,19 @@ def rgb_to_hex(rgb):
     return (r_int << 16) + (g_int << 8) + b_int
 
 
+@dataclass
+class ArticleImagePair:
+    article_id: int
+    image_idx: int
+
+
 async def generate_embed_from_article_id(
-    self, channel, article_id:int, image_idx:int=1, isRoll:bool=False
+    self,
+    channel,
+    article_id: int,
+    image_idx: int = 1,
+    footer_counter: str = "",
+    isRoll: bool = False,
 ):
     article_id = int(article_id)
 
@@ -70,8 +83,10 @@ async def generate_embed_from_article_id(
         article_owner = article_claimdata[1]  # The user ID of the owner
 
     color = ord(article[1][0].lower()) - 97  # Color is based on first letter of article
-    color = colorsys.hsv_to_rgb(color/25, 1, 0.82)
+    color = colorsys.hsv_to_rgb(color / 25, 1, 0.82)
     color = rgb_to_hex(color)
+
+    print(footer_counter)
 
     embed = discord.Embed(
         # colour=color_claimable
@@ -83,18 +98,15 @@ async def generate_embed_from_article_id(
         # Example: [Description text] ⋅ 12345
         title=article[1],
     )
-    if article_owner and article_owner != 'NULL':
+    if article_owner and article_owner != "NULL":
         embed.add_field(
             name="", value=f"Owned by **{self.bot.get_user(article_owner)}**"
         )
 
     if article_image:
-        if isRoll:  # Smaller image and no footer for mobile viewability
+        if isRoll:  # Smaller image and no footer for mobile viewability on rolls
             embed.set_thumbnail(url=article_image[1])  # Image url
-            # embed.set_thumbnail(url=article_image[1].replace('/commons/', '/en/'))  # Backup for commons images. Use [fiximg
-            embed.set_footer(
-                text=f"{image_idx}/{len(article_image_all)}"
-            )  # Example: 1/10
+            embed.set_footer(text=footer_counter)  # Example: 1/10
 
             if "wikipedia/commons/" in article_image[1]:
                 embed.set_image(
@@ -102,24 +114,22 @@ async def generate_embed_from_article_id(
                     .replace("wikipedia/commons/", "wikipedia/en/")
                     .replace("250px", "90px")
                 )  # Image url
-        else:
+        else:  # Full-size display of the image
             embed.set_image(url=article_image[1].replace("250px", "360px"))  # Image url
             if (
                 article_image[2] != ""
             ):  # Avoiding separator if there's no description (nothing to separate)
-                embed.set_footer(
-                    text=f"{article_image[2]} ⋅ {image_idx}/{len(article_image_all)}"
-                )
+                embed.set_footer(text=f"{article_image[2]} ⋅ {footer_counter}")
                 # Example: [Image description] ⋅ 1/10
             else:
-                embed.set_footer(
-                    text=f"{image_idx}/{len(article_image_all)}"
-                )  # Example: 1/10
+                embed.set_footer(text=footer_counter)  # Example: 1/10
 
             if "wikipedia/commons/" in article_image[1]:
                 embed.set_thumbnail(
                     url=article_image[1].replace("wikipedia/commons/", "wikipedia/en/")
                 )  # Backup for commons images. Use [fiximg
+    else:  # Article with no image, only need to set footer
+        embed.set_footer(text=footer_counter)  # Example: 1/10
 
     return embed
 
@@ -134,15 +144,17 @@ async def get_article_from_arg(ctx, message):
         except ValueError:
             ctx.message.channel.send(f"{message} is not a valid ID.")
             return
-        
+
         article = art_cur.execute(
             "SELECT * FROM articles WHERE article_id = ?",
             (message,),
         ).fetchone()
         if article == None:
-            await ctx.message.channel.send(f'Couldn\'t find an article at ID **{message}**.')
+            await ctx.message.channel.send(
+                f"Couldn't find an article at ID **{message}**."
+            )
             return
-        
+
         return article
     else:
         article = art_cur.execute(
@@ -150,9 +162,9 @@ async def get_article_from_arg(ctx, message):
             (message,),
         ).fetchone()
         if article == None:
-            await ctx.message.channel.send(f'Couldn\'t find the article **{message}**.')
+            await ctx.message.channel.send(f"Couldn't find the article **{message}**.")
             return
-        
+
         return article  # After to avoid 'NoneType' object is not subscriptable error
 
 
@@ -168,9 +180,17 @@ async def get_article_title_from_arg(ctx, message):
         return article[1]
 
 
-async def generate_navbuttons_for_image_list(
-    self, article_id, image_list, channel, isRoll: bool, image_idx:int = 1
+async def generate_viewer_from_article_data(
+    self, image_list, channel, isRoll: bool, article_id=1, idx: int = 0
 ):
+    # No article images
+    # article_id argument is optional for this purpose; it isn't used otherwise
+    if image_list == []:
+        embed = await generate_embed_from_article_id(
+            self=self, article_id=article_id, channel=channel, isRoll=isRoll
+        )
+        return embed, None
+
     # Buttons
     button_left = Button(label="<", style=discord.ButtonStyle.grey)
     button_right = Button(label=">", style=discord.ButtonStyle.grey)
@@ -178,30 +198,38 @@ async def generate_navbuttons_for_image_list(
     def button_make_callback(
         isLeft: bool, isRoll: bool = False
     ):  # Nested to allow for both left and right with one function
-        nonlocal image_idx
+        nonlocal idx
 
         async def callback(interaction):
-            nonlocal image_idx
+            nonlocal idx
 
             image_count = len(image_list)
 
             if isLeft:
-                image_idx -= 1
-                if image_idx == 0:  # If going back at 1, loop back to the last image
-                    image_idx = image_count
-            else:
-                image_idx += 1
+                idx -= 1
                 if (
-                    image_idx > image_count
-                ):  # If going forwards at the limit, loop back to 1
-                    image_idx = 1
+                    idx == -1
+                ):  # If going back at first image, loop back to the last image
+                    idx = image_count - 1
+            else:
+                idx += 1
+                if (
+                    idx == image_count
+                ):  # If going forwards at the last image, loop back to the first image
+                    idx = 0
+
+            if (
+                "fields" in interaction.message.embeds[0].to_dict()
+            ):  # If the article has already been claimed, it will have a field saying so
+                isRoll = False
 
             embed = await generate_embed_from_article_id(
                 self=self,
-                article_id=image_list[image_idx-1][4],
+                article_id=image_list[idx].article_id,
+                image_idx=image_list[idx].image_idx,
                 channel=channel,
-                image_idx=image_idx,
-                isRoll=isRoll
+                isRoll=isRoll,
+                footer_counter=f"{idx + 1}/{len(image_list)}",
             )
             await interaction.response.edit_message(embed=embed)
 
@@ -216,10 +244,11 @@ async def generate_navbuttons_for_image_list(
 
     embed = await generate_embed_from_article_id(
         self=self,
-        article_id=image_list[image_idx-1][4],
+        article_id=image_list[idx].article_id,
+        image_idx=image_list[idx].image_idx,
+        footer_counter=f"{idx + 1}/{len(image_list)}",
         channel=channel,
-        image_idx=image_idx,
-        isRoll=isRoll
+        isRoll=isRoll,
     )
 
     return embed, view

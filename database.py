@@ -10,6 +10,7 @@ cur.execute("""
         article_id UNIQUE PRIMARY KEY,
         user_id,
         selected_image,
+        position,
         is_star,
         is_tag1,
         is_tag2,

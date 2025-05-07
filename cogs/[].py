@@ -23,14 +23,24 @@ class Roll(commands.Cog):
         article_id = random.randint(1, article_count)
         # article_id = 2
 
-        embed = await global_func.generate_embed_from_article_id(
-            self=self, article_id=article_id, channel=ctx.message.channel, isRoll=True
+        image_count = len(
+            global_func.art_cur.execute(
+                """
+            SELECT * FROM article_images WHERE article_id=?                            
+        """,
+                (article_id,),
+            ).fetchall()
         )
-        view = await global_func.generate_forward_and_backward_buttons(
+        image_list = [
+            global_func.ArticleImagePair(image_idx=i, article_id=article_id)
+            for i in range(1, image_count + 1)
+        ]
+
+        embed, view = await global_func.generate_viewer_from_article_data(
             self=self,
             article_id=article_id,
+            image_list=image_list,
             channel=ctx.message.channel,
-            embed=embed,
             isRoll=True,
         )
 

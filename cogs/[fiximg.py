@@ -35,7 +35,7 @@ class FixImg(commands.Cog):
         ).fetchone()
         if image_url == None:
             await ctx.send(
-                f'Couldn\'t find image **{image_id_per_article}** for the article **{message[0]!s}**.'
+                f"Couldn't find image **{image_id_per_article}** for the article **{message[0]!s}**."
             )
             return
         image_url = image_url[
@@ -49,9 +49,7 @@ class FixImg(commands.Cog):
         try:
             response = requests.get(image_url, headers=headers)
             if response.status_code != 404:
-                await ctx.send(
-                    "The image already displays in full size."
-                )
+                await ctx.send("The image already displays in full size.")
                 return
         except requests.exceptions.RequestException:
             print("RequestException")

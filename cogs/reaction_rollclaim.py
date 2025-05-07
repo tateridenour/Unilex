@@ -50,6 +50,11 @@ class ClaimRollOnReaction(commands.Cog):
                 article_claimdata = clm_cur.execute(
                     "SELECT * FROM claims WHERE article_id = ?", (article_id,)
                 ).fetchone()
+                claims_count = len(
+                    clm_cur.execute(
+                        "SELECT * FROM claims WHERE user_id = ?", (payload.member.id,)
+                    ).fetchall()
+                )
                 if article_claimdata == None:  # Makes new item in claims table
                     clm_cur.execute(
                         """
@@ -57,14 +62,21 @@ class ClaimRollOnReaction(commands.Cog):
                             (article_id,
                             user_id,
                             selected_image,
+                            position,
                             is_star,
                             is_tag1,
                             is_tag2,
                             created_at,
                             updated_at
-                        ) VALUES (?, ?, 1, 0, 0, 0, ?, NULL)
+                        ) VALUES (?, ?, 1, ?, 0, 0, 0, ?, ?)
                     """,
-                        (article_id, payload.member.id, datetime.now(UTC)),
+                        (
+                            article_id,
+                            payload.member.id,
+                            claims_count + 1,
+                            datetime.now(UTC),
+                            datetime.now(UTC),
+                        ),
                     )
                 else:  # Updates existing item in claims table
                     clm_cur.execute(
