@@ -3,11 +3,6 @@ from discord.ext import commands
 
 import global_functions as global_func
 
-# # Initializing sqlite3 for articles
-# art_path = 'data/articles.db'
-# art_con = sqlite3.connect(art_path)
-# art_cur = art_con.cursor()
-
 # Getting number of articles
 article_count = global_func.art_cur.execute("SELECT COUNT(*) FROM articles").fetchone()[
     0
